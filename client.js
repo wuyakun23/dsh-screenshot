@@ -74,7 +74,7 @@ window.__ModuleLoader__.load({
 .dsh-shot-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background .12s,color .12s}
 .dsh-shot-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
 .dsh-shot-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
-.dsh-shot-btn:disabled{cursor:progress;opacity:.7}
+.dsh-shot-btn:disabled{cursor:default;opacity:1}
 .dsh-shot-btn svg{width:16px;height:16px;display:block}
 .dsh-shot-blur{animation:dsh-shot-blur 1.1s ease-in-out infinite}
 @keyframes dsh-shot-blur{0%,100%{opacity:1}50%{opacity:.35}}
@@ -338,7 +338,7 @@ window.__ModuleLoader__.load({
               if (!busy) void captureNow()
             },
           },
-          h(CameraIcon, busy ? { className: 'dsh-shot-blur' } : null),
+          h(CameraIcon),
         ),
       )
     }
@@ -740,6 +740,15 @@ window.__ModuleLoader__.load({
     function PreviewOverlay() {
       const state = React.useSyncExternalStore(store.subscribe, store.get, store.get)
       const t = useT()
+      const [slowCapturing, setSlowCapturing] = React.useState(false)
+      React.useEffect(() => {
+        if (state.status !== 'capturing') {
+          setSlowCapturing(false)
+          return undefined
+        }
+        const timer = setTimeout(() => setSlowCapturing(true), 1200)
+        return () => clearTimeout(timer)
+      }, [state.status])
       React.useEffect(() => {
         if (state.status === 'idle') return undefined
         const onKeyDown = (event) => {
@@ -750,6 +759,9 @@ window.__ModuleLoader__.load({
       }, [state.status])
       if (state.status === 'idle') return null
       if (state.status === 'capturing') {
+        // Never paint a page overlay before the grab: the Harness frame is captured
+        // right after the request arrives, so anything drawn here would end up in it.
+        if (!slowCapturing) return null
         return h(
           React.Fragment,
           null,
