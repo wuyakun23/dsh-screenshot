@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Screenshot",
+    "description": "Adds a screenshot button to the composer and can minimize the Harness window while the screen is captured."
+  }
+}

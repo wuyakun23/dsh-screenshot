@@ -1,0 +1,50 @@
+{
+  "format": 1,
+  "title": {
+    "en": "DeepSeek Harness plugins",
+    "zh": "DeepSeek Harness 插件"
+  },
+  "description": {
+    "en": "Community bundles for DeepSeek Harness.",
+    "zh": "DeepSeek Harness 的社区插件。"
+  },
+  "plugins": [
+    {
+      "name": "dsh-screenshot",
+      "title": {
+        "en": "Screenshot",
+        "zh": "截图"
+      },
+      "description": {
+        "en": "Full-screen region picker, annotations (rectangle, line, pen), copy or download. Windows only.",
+        "zh": "全屏框选截图，支持矩形/直线/画笔标注，可复制或下载。仅支持 Windows。"
+      },
+      "icon": "icon.svg",
+      "homepage": "https://github.com/wuyakun23/dsh-screenshot#readme",
+      "repository": {
+        "url": "https://github.com/wuyakun23/dsh-screenshot"
+      },
+      "metadata": {
+        "keywords": [
+          "screenshot",
+          "annotation",
+          "windows"
+        ]
+      },
+      "versions": [
+        {
+          "version": "2.0.0",
+          "publishTimestamp": 1794791792,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/wuyakun23/dsh-screenshot",
+            "commit": "a529e126586699c4cd9b9e21bddc80c8df8c7acf"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5"
+          }
+        }
+      ]
+    }
+  ]
+}
