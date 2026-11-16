@@ -33,12 +33,12 @@
       },
       "versions": [
         {
-          "version": "2.1.0",
-          "publishTimestamp": 1794797293,
+          "version": "2.1.1",
+          "publishTimestamp": 1794797693,
           "source": {
             "type": "git",
             "url": "https://github.com/wuyakun23/dsh-screenshot",
-            "commit": "e944c64de82b4997bf48f2d87e5f53ae6c938897"
+            "commit": "5ebedf0793a57d83a32fd50c8197fec37257fa2e"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.5"
