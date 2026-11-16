@@ -23,7 +23,7 @@ const ROUTE_ROOT = '/api/dsh-screenshot'
 const STATE_DIR = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'screenshot-plugin')
 const SETTINGS_PATH = join(STATE_DIR, 'settings.json')
 /** Bump when `HELPER_SOURCE` changes so a stale executable is rebuilt. */
-const HELPER_VERSION = 3
+const HELPER_VERSION = 4
 const HELPER_PATH = join(STATE_DIR, 'bin', `dsh-shot-v${HELPER_VERSION}.exe`)
 /** Refuse responses larger than this so a pathological screen cannot wedge the page. */
 const MAX_IMAGE_BYTES = 24 * 1024 * 1024
@@ -135,19 +135,29 @@ internal static class DshShot
         }
     }
 
+    private static Bitmap CaptureScreen()
+    {
+        var screen = SystemInformation.VirtualScreen;
+        var bitmap = new Bitmap(screen.Width, screen.Height, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.CopyFromScreen(screen.X, screen.Y, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
+        }
+        return bitmap;
+    }
+
     [STAThread]
     private static int Main(string[] args)
     {
         // Mark the process DPI-aware before any metric, DC, or window is created:
-        // otherwise Windows virtualizes the desktop (a 200% display reports 1620x1080
-        // instead of 3240x2160) and the frozen image appears magnified.
+        // otherwise Windows virtualizes the desktop and the frozen image appears magnified.
         try
         {
             SetProcessDPIAware();
         }
         catch
         {
-            // Older systems without the export keep the virtualized behavior.
+            // Older systems keep the virtualized behavior.
         }
 
         // args: <mode> <pngPath> <resultPath> [settleMs] [lang]
@@ -159,10 +169,21 @@ internal static class DshShot
         var lang = args.Length > 4 && args[4] == "en" ? "en" : "zh";
 
         var minimized = new List<IntPtr>();
+        Bitmap keep = null;
+        Bitmap clear = null;
         try
         {
             var handles = FindHarnessWindows();
-            if (mode == "minimize")
+            var visible = false;
+            foreach (var hWnd in handles)
+            {
+                if (!IsIconic(hWnd)) visible = true;
+            }
+            // Both variants are captured in one session: the window as it stands,
+            // and the window minimized. The picker switches between them, so the
+            // Harness UI itself can be selected as well as anything behind it.
+            keep = CaptureScreen();
+            if (visible)
             {
                 foreach (var hWnd in handles)
                 {
@@ -171,37 +192,39 @@ internal static class DshShot
                     if (WaitUntil(() => IsIconic(hWnd), 400)) minimized.Add(hWnd);
                 }
                 if (minimized.Count > 0) Thread.Sleep(settle);
-            }
-            var screen = SystemInformation.VirtualScreen;
-            using (var bitmap = new Bitmap(screen.Width, screen.Height, PixelFormat.Format32bppArgb))
-            {
-                using (var graphics = Graphics.FromImage(bitmap))
-                {
-                    graphics.CopyFromScreen(screen.X, screen.Y, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
-                }
-                // Bring the app back before the overlay covers everything, so it is in
-                // front again (showing the preview) once the selection closes.
+                clear = CaptureScreen();
                 RestoreWindows(minimized);
                 minimized.Clear();
+            }
+            else
+            {
+                clear = keep;
+            }
 
-                Application.EnableVisualStyles();
-                Rectangle selection;
-                using (var form = new ShotForm(bitmap, screen, lang))
-                {
-                    Application.Run(form);
-                    selection = form.Selection;
-                }
-                if (selection.Width <= 0 || selection.Height <= 0)
-                {
-                    WriteResult(resultPath, "{\"ok\":false,\"cancelled\":true}");
-                    return 0;
-                }
-                using (var cropped = bitmap.Clone(selection, PixelFormat.Format32bppArgb))
-                {
-                    cropped.Save(pngPath, ImageFormat.Png);
-                    WriteResult(resultPath, "{\"ok\":true,\"width\":" + cropped.Width + ",\"height\":" + cropped.Height
-                        + ",\"x\":" + selection.X + ",\"y\":" + selection.Y + ",\"cancelled\":false}");
-                }
+            var both = !ReferenceEquals(keep, clear);
+            var defaultVariant = mode == "minimize" && both ? "clear" : "keep";
+
+            Application.EnableVisualStyles();
+            Rectangle selection;
+            string variant;
+            using (var form = new ShotForm(keep, clear, both, defaultVariant, lang))
+            {
+                Application.Run(form);
+                selection = form.Selection;
+                variant = form.Variant;
+            }
+            if (selection.Width <= 0 || selection.Height <= 0)
+            {
+                WriteResult(resultPath, "{\"ok\":false,\"cancelled\":true}");
+                return 0;
+            }
+            var chosen = variant == "clear" ? clear : keep;
+            using (var cropped = chosen.Clone(selection, PixelFormat.Format32bppArgb))
+            {
+                cropped.Save(pngPath, ImageFormat.Png);
+                WriteResult(resultPath, "{\"ok\":true,\"width\":" + cropped.Width + ",\"height\":" + cropped.Height
+                    + ",\"x\":" + selection.X + ",\"y\":" + selection.Y
+                    + ",\"variant\":\"" + variant + "\",\"cancelled\":false}");
             }
         }
         catch (Exception error)
@@ -211,6 +234,8 @@ internal static class DshShot
         finally
         {
             RestoreWindows(minimized);
+            if (keep != null) keep.Dispose();
+            if (clear != null && !ReferenceEquals(clear, keep)) clear.Dispose();
         }
         return 0;
     }
@@ -218,8 +243,9 @@ internal static class DshShot
 
 internal sealed class ShotForm : Form
 {
-    private readonly Bitmap source;
-    private readonly Rectangle screen;
+    private readonly Bitmap keepShot;
+    private readonly Bitmap clearShot;
+    private readonly bool both;
     private readonly bool english;
     private readonly Font font;
     private float dpiScale = 1f;
@@ -227,16 +253,19 @@ internal sealed class ShotForm : Form
     private bool dragging;
     private Rectangle selection;
     private int hover = -1;
+    private string variant;
 
-    public ShotForm(Bitmap source, Rectangle screen, string lang)
+    public ShotForm(Bitmap keepShot, Bitmap clearShot, bool both, string defaultVariant, string lang)
     {
-        this.source = source;
-        this.screen = screen;
+        this.keepShot = keepShot;
+        this.clearShot = clearShot;
+        this.both = both;
+        variant = defaultVariant == "clear" ? "clear" : "keep";
         english = lang == "en";
         font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
-        Bounds = screen;
+        Bounds = SystemInformation.VirtualScreen;
         TopMost = true;
         ShowInTaskbar = false;
         KeyPreview = true;
@@ -248,6 +277,16 @@ internal sealed class ShotForm : Form
     public Rectangle Selection
     {
         get { return selection; }
+    }
+
+    public string Variant
+    {
+        get { return variant; }
+    }
+
+    private Bitmap Source
+    {
+        get { return variant == "clear" ? clearShot : keepShot; }
     }
 
     protected override void OnShown(EventArgs e)
@@ -272,6 +311,27 @@ internal sealed class ShotForm : Form
     private int S(int value)
     {
         return (int)Math.Round(value * dpiScale);
+    }
+
+    private string[] VariantLabels()
+    {
+        return english ? new[] { "With Harness", "Without Harness" } : new[] { "含 Harness", "不含 Harness" };
+    }
+
+    private Rectangle[] VariantRects()
+    {
+        var labels = VariantLabels();
+        var width = S(english ? 128 : 110);
+        var height = S(34);
+        var gap = S(8);
+        var margin = S(24);
+        var rects = new Rectangle[labels.Length];
+        var top = ClientSize.Height - margin - height;
+        for (var index = 0; index < labels.Length; index++)
+        {
+            rects[index] = new Rectangle(margin + index * (width + gap), top, width, height);
+        }
+        return rects;
     }
 
     private string[] ButtonLabels()
@@ -323,7 +383,7 @@ internal sealed class ShotForm : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         var graphics = e.Graphics;
-        graphics.DrawImage(source, 0, 0, source.Width, source.Height);
+        graphics.DrawImage(Source, 0, 0, ClientSize.Width, ClientSize.Height);
 
         var current = selection;
         if (current.Width > 0 && current.Height > 0)
@@ -362,16 +422,31 @@ internal sealed class ShotForm : Form
             hintSize.Height + S(12));
         DrawBadge(graphics, hintBounds, hint, Color.FromArgb(200, 0, 0, 0), Color.FromArgb(240, 255, 255, 255));
 
-        var labels = ButtonLabels();
-        var rects = ButtonRects();
-        for (var index = 0; index < rects.Length; index++)
+        if (both)
+        {
+            var labels = VariantLabels();
+            var rects = VariantRects();
+            for (var index = 0; index < rects.Length; index++)
+            {
+                var active = (index == 0 && variant == "keep") || (index == 1 && variant == "clear");
+                var hovered = hover == 100 + index;
+                var background = active
+                    ? (hovered ? Color.FromArgb(245, 0, 122, 204) : Color.FromArgb(232, 0, 104, 178))
+                    : (hovered ? Color.FromArgb(240, 56, 56, 62) : Color.FromArgb(224, 32, 32, 36));
+                DrawBadge(graphics, rects[index], labels[index], background, Color.White);
+            }
+        }
+
+        var labels2 = ButtonLabels();
+        var buttonRects = ButtonRects();
+        for (var index = 0; index < buttonRects.Length; index++)
         {
             var disabled = index == 1 && current.Width <= 0;
             var hovered = index == hover && !disabled;
             var background = hovered ? Color.FromArgb(240, 56, 56, 62) : Color.FromArgb(224, 32, 32, 36);
             if (index == 0) background = hovered ? Color.FromArgb(240, 0, 122, 204) : Color.FromArgb(232, 0, 104, 178);
             var textColor = disabled ? Color.FromArgb(130, 255, 255, 255) : Color.White;
-            DrawBadge(graphics, rects[index], labels[index], background, textColor);
+            DrawBadge(graphics, buttonRects[index], labels2[index], background, textColor);
         }
     }
 
@@ -406,6 +481,19 @@ internal sealed class ShotForm : Form
             return;
         }
         if (e.Button != MouseButtons.Left) return;
+
+        if (both)
+        {
+            var variantRects = VariantRects();
+            for (var index = 0; index < variantRects.Length; index++)
+            {
+                if (!variantRects[index].Contains(e.Location)) continue;
+                variant = index == 0 ? "keep" : "clear";
+                Invalidate();
+                return;
+            }
+        }
+
         var rects = ButtonRects();
         for (var index = 0; index < rects.Length; index++)
         {
@@ -432,11 +520,22 @@ internal sealed class ShotForm : Form
             Invalidate();
             return;
         }
-        var rects = ButtonRects();
         var next = -1;
-        for (var index = 0; index < rects.Length; index++)
+        if (both)
         {
-            if (rects[index].Contains(e.Location)) next = index;
+            var variantRects = VariantRects();
+            for (var index = 0; index < variantRects.Length; index++)
+            {
+                if (variantRects[index].Contains(e.Location)) next = 100 + index;
+            }
+        }
+        if (next < 0)
+        {
+            var rects = ButtonRects();
+            for (var index = 0; index < rects.Length; index++)
+            {
+                if (rects[index].Contains(e.Location)) next = index;
+            }
         }
         Cursor = next >= 0 ? Cursors.Hand : Cursors.Cross;
         if (next != hover)

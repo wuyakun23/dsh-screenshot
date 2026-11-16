@@ -13,8 +13,11 @@ the framework's `csc.exe` (shipped with Windows).
 - Full-screen, always-on-top region picker (WeChat-style): drag anywhere,
   including over other applications and other monitors; `整屏 / 完成 / 取消`
   are drawn on the overlay itself. Enter confirms, Esc or right-click cancels.
-- Optional: minimize the Harness window while capturing (default on), so the
-  frozen screen never contains the app itself.
+- Both frames in one shot: the picker captures the screen **with** the Harness
+  window and **without** it (minimized), and its bottom-left toggle
+  `含 Harness / 不含 Harness` switches the frozen frame — so the Harness UI
+  itself can be captured as well as whatever is behind it. The
+  “minimize Harness” setting only picks which frame is shown first.
 - Annotation editor in the preview: rectangle outline, straight line
   (`Shift` locks horizontal/vertical), freehand pen, 8 colors, 3 widths,
   undo and clear. Copy/download bake the annotations in.
