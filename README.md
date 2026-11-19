@@ -14,16 +14,16 @@ the framework's `csc.exe` (shipped with Windows).
   including over other applications and other monitors; `整屏 / 完成 / 取消`
   are drawn on the overlay itself. Enter confirms, Esc or right-click cancels.
 - Both frames in one shot: the picker captures the screen **with** the Harness
-  window and **without** it (minimized), and its bottom-left toggle
-  `含 Harness / 不含 Harness` switches the frozen frame — so the Harness UI
-  itself can be captured as well as whatever is behind it. The
-  “minimize Harness” setting only picks which frame is shown first.
+  window and **without** it (minimized), and its bottom-left **最小化 Harness**
+  switch chooses the frozen frame — so the Harness UI itself can be captured as
+  well as whatever is behind it. The switch also becomes the saved default for
+  the next capture (Settings → General → “截图” mirrors it).
 - Annotation editor in the preview: rectangle outline, straight line
   (`Shift` locks horizontal/vertical), freehand pen, 8 colors, 3 widths,
   undo and clear. Copy/download bake the annotations in.
 - High-DPI aware: captures the real physical resolution (e.g. 3240×2160 on a
   200% display) instead of a virtualized, magnified image.
-- Settings row (Settings → General → “截图”) for the minimize preference.
+- Settings row (Settings → General → “截图”) mirrors the picker switch.
 - Fast: the native helper is compiled once and cached under
   `%USERPROFILE%\.dsh\screenshot-plugin\bin`, so one capture costs ~0.25 s
   (keep) to ~0.5 s (minimize) instead of a several-second PowerShell start.

@@ -1,6 +1,6 @@
 {
   "name": "dsh-screenshot",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Screenshot plugin for DeepSeek Harness: full-screen region picker, annotations, copy or download (Windows).",
   "type": "module",
   "license": "MIT",

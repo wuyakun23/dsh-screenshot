@@ -23,7 +23,7 @@ const ROUTE_ROOT = '/api/dsh-screenshot'
 const STATE_DIR = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'screenshot-plugin')
 const SETTINGS_PATH = join(STATE_DIR, 'settings.json')
 /** Bump when `HELPER_SOURCE` changes so a stale executable is rebuilt. */
-const HELPER_VERSION = 4
+const HELPER_VERSION = 5
 const HELPER_PATH = join(STATE_DIR, 'bin', `dsh-shot-v${HELPER_VERSION}.exe`)
 /** Refuse responses larger than this so a pathological screen cannot wedge the page. */
 const MAX_IMAGE_BYTES = 24 * 1024 * 1024
@@ -34,7 +34,7 @@ const SETTLE_MS = 120
 
 /** .NET console helper: minimize, grab, restore, report one JSON result. */
 const HELPER_SOURCE = String.raw`
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -313,25 +313,17 @@ internal sealed class ShotForm : Form
         return (int)Math.Round(value * dpiScale);
     }
 
-    private string[] VariantLabels()
+    private string VariantLabel()
     {
-        return english ? new[] { "With Harness", "Without Harness" } : new[] { "含 Harness", "不含 Harness" };
+        return english ? "Minimize Harness" : "最小化 Harness";
     }
 
-    private Rectangle[] VariantRects()
+    private Rectangle VariantRect()
     {
-        var labels = VariantLabels();
-        var width = S(english ? 128 : 110);
+        var width = S(english ? 208 : 176);
         var height = S(34);
-        var gap = S(8);
         var margin = S(24);
-        var rects = new Rectangle[labels.Length];
-        var top = ClientSize.Height - margin - height;
-        for (var index = 0; index < labels.Length; index++)
-        {
-            rects[index] = new Rectangle(margin + index * (width + gap), top, width, height);
-        }
-        return rects;
+        return new Rectangle(margin, ClientSize.Height - margin - height, width, height);
     }
 
     private string[] ButtonLabels()
@@ -380,6 +372,34 @@ internal sealed class ShotForm : Form
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
     }
 
+    private void DrawToggleBadge(Graphics graphics, Rectangle bounds, string text, bool on, bool hovered)
+    {
+        var background = hovered ? Color.FromArgb(240, 56, 56, 62) : Color.FromArgb(224, 32, 32, 36);
+        using (var path = Rounded(bounds, S(6)))
+        using (var brush = new SolidBrush(background))
+        {
+            graphics.FillPath(brush, path);
+        }
+        var trackWidth = S(30);
+        var trackHeight = S(16);
+        var pad = S(10);
+        var track = new Rectangle(bounds.X + pad, bounds.Y + (bounds.Height - trackHeight) / 2, trackWidth, trackHeight);
+        using (var path = Rounded(track, trackHeight / 2))
+        using (var brush = new SolidBrush(on ? Color.FromArgb(0, 174, 236) : Color.FromArgb(120, 120, 130)))
+        {
+            graphics.FillPath(brush, path);
+        }
+        var knobSize = trackHeight - S(4);
+        var knob = new Rectangle(on ? track.Right - knobSize - S(2) : track.X + S(2), track.Y + S(2), knobSize, knobSize);
+        using (var brush = new SolidBrush(Color.White))
+        {
+            graphics.FillEllipse(brush, knob);
+        }
+        var textRect = new Rectangle(track.Right + S(8), bounds.Y, bounds.Right - track.Right - S(10), bounds.Height);
+        TextRenderer.DrawText(graphics, text, font, textRect, Color.White,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var graphics = e.Graphics;
@@ -424,17 +444,7 @@ internal sealed class ShotForm : Form
 
         if (both)
         {
-            var labels = VariantLabels();
-            var rects = VariantRects();
-            for (var index = 0; index < rects.Length; index++)
-            {
-                var active = (index == 0 && variant == "keep") || (index == 1 && variant == "clear");
-                var hovered = hover == 100 + index;
-                var background = active
-                    ? (hovered ? Color.FromArgb(245, 0, 122, 204) : Color.FromArgb(232, 0, 104, 178))
-                    : (hovered ? Color.FromArgb(240, 56, 56, 62) : Color.FromArgb(224, 32, 32, 36));
-                DrawBadge(graphics, rects[index], labels[index], background, Color.White);
-            }
+            DrawToggleBadge(graphics, VariantRect(), VariantLabel(), variant == "clear", hover == 100);
         }
 
         var labels2 = ButtonLabels();
@@ -484,11 +494,9 @@ internal sealed class ShotForm : Form
 
         if (both)
         {
-            var variantRects = VariantRects();
-            for (var index = 0; index < variantRects.Length; index++)
+            if (VariantRect().Contains(e.Location))
             {
-                if (!variantRects[index].Contains(e.Location)) continue;
-                variant = index == 0 ? "keep" : "clear";
+                variant = variant == "clear" ? "keep" : "clear";
                 Invalidate();
                 return;
             }
@@ -521,14 +529,7 @@ internal sealed class ShotForm : Form
             return;
         }
         var next = -1;
-        if (both)
-        {
-            var variantRects = VariantRects();
-            for (var index = 0; index < variantRects.Length; index++)
-            {
-                if (variantRects[index].Contains(e.Location)) next = 100 + index;
-            }
-        }
+        if (both && VariantRect().Contains(e.Location)) next = 100;
         if (next < 0)
         {
             var rects = ButtonRects();

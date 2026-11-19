@@ -113,7 +113,7 @@ window.__ModuleLoader__.load({
 .dsh-shot-switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dsh-shot-switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
 .dsh-shot-switch[data-on="true"]::after{transform:translateX(14px)}
-.dsh-shot-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dsh-shot-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
 .dsh-shot-action{height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:13px;cursor:pointer;transition:border-color .12s,background .12s}
 .dsh-shot-action:hover{border-color:var(--dsw-alias-border-l2)}
 .dsh-shot-action--primary{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);color:#fff}
@@ -197,6 +197,7 @@ window.__ModuleLoader__.load({
             return
           }
           store.set({ status: 'preview', shot: payload })
+          if (payload.variant === 'keep' || payload.variant === 'clear') setMinimize(payload.variant === 'clear')
           return
         }
         throw new Error(payload?.error ?? 'capture failed')
@@ -577,7 +578,7 @@ window.__ModuleLoader__.load({
       const meta = [
         `${shot.width} × ${shot.height}`,
         formatBytes(shot.bytes),
-        shot.mode === 'minimize' ? t('mode.minimize') : t('mode.keep'),
+        shot.variant === 'clear' || (shot.variant === undefined && shot.mode === 'minimize') ? t('mode.minimize') : t('mode.keep'),
         t('edit.hint'),
       ]
         .filter((part) => part !== '')
@@ -706,21 +707,7 @@ window.__ModuleLoader__.load({
             h(
               'footer',
               { className: 'dsh-shot-foot' },
-              h(
-                'div',
-                { className: 'dsh-shot-setting' },
-                h('button', {
-                  type: 'button',
-                  role: 'switch',
-                  className: 'dsh-shot-switch',
-                  'data-on': state.minimize ? 'true' : 'false',
-                  'aria-checked': state.minimize ? 'true' : 'false',
-                  'aria-label': t('setting.minimize'),
-                  title: t('setting.minimize'),
-                  onClick: () => setMinimize(!state.minimize),
-                }),
-                h('span', { className: 'dsh-shot-setting-label', onClick: () => setMinimize(!state.minimize) }, t('setting.minimize')),
-              ),
+
               h(
                 'div',
                 { className: 'dsh-shot-actions' },
